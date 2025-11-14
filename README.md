@@ -261,7 +261,7 @@ This project is created for educational purposes as part of a System Security co
 
 ## Authors
 
-System Security Capstone Project Team
+Elia Ghazal, George Khayat, and Elia Hourany
 
 ## Acknowledgments
 
