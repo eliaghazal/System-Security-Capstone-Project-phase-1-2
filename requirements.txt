@@ -1,0 +1,6 @@
+# Testing
+pytest>=7.4.0
+pytest-cov>=4.1.0
+
+# For language model perplexity (optional, lightweight approach)
+numpy>=1.24.0
