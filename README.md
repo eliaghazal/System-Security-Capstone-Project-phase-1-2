@@ -261,7 +261,7 @@ This project is created for educational purposes as part of a System Security co
 
 ## Authors
 
-Elia Ghazal, George Khayat, and Elia Hourany
+Elia Ghazal
 
 ## Acknowledgments
 
