@@ -1,0 +1,6 @@
+# System Security Capstone Project
+# This project uses only Python standard library
+# No external dependencies required!
+
+# For testing (optional):
+# pytest>=7.0.0
