@@ -59,7 +59,17 @@ class AIRecommender:
             'because': 1, 'any': 1, 'these': 1, 'give': 1, 'day': 1, 'most': 1, 'us': 1,
             'is': 85, 'was': 75, 'are': 70, 'been': 65, 'has': 60, 'had': 55, 'were': 50,
             'said': 45, 'did': 40, 'am': 35, 'being': 30, 'very': 25, 'never': 20,
-            'may': 15, 'might': 10, 'must': 10, 'should': 10, 'hello': 5, 'world': 5,
+            'may': 15, 'might': 10, 'must': 10, 'should': 10, 'hello': 50, 'world': 50,
+            # Add more common words for better segmentation
+            'quick': 25, 'brown': 25, 'fox': 25, 'dog': 25, 'cat': 25, 'man': 25,
+            'woman': 25, 'child': 25, 'boy': 25, 'girl': 25, 'sir': 25, 'yes': 25,
+            'where': 30, 'why': 30, 'here': 30, 'there': 30, 'every': 20,
+            'everyone': 20, 'everything': 20, 'somewhere': 20, 'anywhere': 20,
+            'someone': 20, 'something': 20, 'nothing': 20, 'nobody': 20,
+            # Common action words
+            'attack': 30, 'defend': 25, 'meet': 30, 'send': 25, 'receive': 20,
+            'dawn': 25, 'dusk': 20, 'midnight': 25, 'noon': 20, 'morning': 25,
+            'night': 30, 'today': 25, 'tomorrow': 25, 'yesterday': 20,
         }
         return common_words
     
@@ -108,12 +118,63 @@ class AIRecommender:
         words = re.findall(r'[a-zA-Z]+', text.lower())
         return words
     
+    def _segment_text(self, text):
+        """
+        Segment concatenated text into words using dynamic programming.
+        
+        This uses a word segmentation algorithm that finds the best way to split
+        concatenated text into dictionary words. Useful for text without spaces.
+        
+        Args:
+            text (str): Concatenated text without spaces
+            
+        Returns:
+            list: List of segmented words
+        """
+        text = text.lower()
+        text = re.sub(r'[^a-z]', '', text)  # Keep only letters
+        
+        if not text:
+            return []
+        
+        n = len(text)
+        # dp[i] = (score, word_list) for best segmentation of text[0:i]
+        dp = [(0.0, [])] + [(float('-inf'), [])] * n
+        
+        for i in range(1, n + 1):
+            # Try all possible last words ending at position i
+            for j in range(max(0, i - 20), i):  # Limit word length to 20 chars
+                word = text[j:i]
+                word_len = len(word)
+                
+                # Score this word
+                if word in self.word_freq:
+                    # Prefer known words, with bonus for longer words
+                    word_score = math.log(self.word_freq[word] + 1) + word_len * 0.5
+                else:
+                    # Heavy penalty for unknown words, especially short ones
+                    if word_len == 1:
+                        word_score = -15  # Very bad
+                    elif word_len == 2:
+                        word_score = -10  # Bad
+                    else:
+                        word_score = -5 / word_len  # Less penalty for longer unknown words
+                
+                # Calculate total score for this segmentation
+                total_score = dp[j][0] + word_score
+                
+                if total_score > dp[i][0]:
+                    dp[i] = (total_score, dp[j][1] + [word])
+        
+        return dp[n][1]
+    
     def score_dictionary(self, text):
         """
         METHOD A: Dictionary/word-match scoring
         
         Tokenize the text and count how many words match our dictionary.
-        Score is weighted by word frequency.
+        Score is weighted by word frequency. If text has no spaces, attempts
+        to segment it into words automatically.
         
         Args:
             text (str): Candidate plaintext
@@ -123,8 +184,14 @@ class AIRecommender:
         """
         words = self._tokenize(text)
         
+        # If we got only one long word, try word segmentation
+        if len(words) == 1 and len(words[0]) > 5:
+            segmented = self._segment_text(words[0])
+            if len(segmented) > 1:  # Segmentation found multiple words
+                words = segmented
+        
         if not words:
-            return 0.0, {'matched_words': [], 'total_words': 0, 'match_rate': 0.0}
+            return 0.0, {'matched_words': [], 'total_words': 0, 'match_rate': 0.0, 'segmented': False}
         
         matched_words = []
         total_score = 0
@@ -147,6 +214,7 @@ class AIRecommender:
             'matched_count': len(matched_words),
             'match_rate': match_rate,
             'avg_frequency': avg_score,
+            'segmented': len(words) > 1 and ' ' not in text,
         }
         
         return final_score, explanation
@@ -157,6 +225,7 @@ class AIRecommender:
         
         Calculate log probability based on quadgram frequencies.
         Higher score = more likely to be English text.
+        Handles both spaced and non-spaced text.
         
         Args:
             text (str): Candidate plaintext
@@ -164,9 +233,9 @@ class AIRecommender:
         Returns:
             tuple: (score, explanation_dict)
         """
-        text = text.upper().replace(' ', '')
+        text_upper = text.upper()
         
-        if len(text) < 4:
+        if len(text_upper) < 4:
             return -100.0, {'quadgram_count': 0, 'log_likelihood': -100.0}
         
         log_prob = 0.0
@@ -174,8 +243,8 @@ class AIRecommender:
         found_quadgrams = []
         
         # Calculate log probability for each quadgram
-        for i in range(len(text) - 3):
-            quadgram = text[i:i+4]
+        for i in range(len(text_upper) - 3):
+            quadgram = text_upper[i:i+4]
             
             if quadgram in self.quadgrams:
                 prob = self.quadgrams[quadgram]
@@ -187,7 +256,7 @@ class AIRecommender:
                 log_prob += -5.0
         
         # Normalize by text length
-        avg_log_prob = log_prob / (len(text) - 3) if len(text) > 3 else -100
+        avg_log_prob = log_prob / (len(text_upper) - 3) if len(text_upper) > 3 else -100
         
         explanation = {
             'quadgram_count': quadgram_count,
